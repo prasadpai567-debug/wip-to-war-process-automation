@@ -1,0 +1,13 @@
+# Keep live workbook exports and unsanitized macro files out of the public repository.
+*.xlsx
+*.xlsm
+*.xlsb
+workbook/private/
+workbook/live-data/
+*.export.xlsx
+
+# Local analysis artifacts
+work/
+outputs/
+.DS_Store
+Thumbs.db
