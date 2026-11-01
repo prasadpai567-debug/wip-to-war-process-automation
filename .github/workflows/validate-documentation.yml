@@ -1,0 +1,47 @@
+name: Validate repository documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation:
+    name: Check documentation and artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check required documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in README.md docs/REPOSITORY_AUDIT.md docs/TEST_PLAN.md docs/PORTFOLIO_SUMMARY.md; do
+            test -s "$file"
+          done
+
+      - name: Check required headings and status mapping
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '^# ' README.md
+          grep -q '^## Business problem' README.md
+          grep -q '^## Setup and usage' README.md
+          grep -q '^## Safety and data handling' README.md
+          grep -q '^# Test Plan' docs/TEST_PLAN.md
+          grep -q '^# Repository Audit' docs/REPOSITORY_AUDIT.md
+          grep -q '^# Portfolio Summary' docs/PORTFOLIO_SUMMARY.md
+          grep -ERq 'VAR|WAR' README.md docs src/Module1.bas
+
+      - name: Block workbook and export artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find . -type f \( -iname '*.xlsm' -o -iname '*.xlsx' -o -iname '*.xls' \) -not -path './.git/*' -print -quit | grep -q .; then
+            echo 'Workbook or SAP export artifact detected. Keep production data out of the repository.'
+            exit 1
+          fi
