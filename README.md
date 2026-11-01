@@ -181,6 +181,12 @@ Known technical limitations include:
 
 See [REPOSITORY_AUDIT.md](docs/REPOSITORY_AUDIT.md) for the detailed findings and [TEST_PLAN.md](docs/TEST_PLAN.md) for the recommended validation approach.
 
+## Repository validation
+
+A lightweight GitHub Actions workflow runs on pushes to `main` and pull requests. It checks that the required documentation exists, required headings and the documented status mapping are present, and workbook or SAP export artifacts are not committed. It does not execute Excel, VBA, or SAP.
+
+See [validate-documentation.yml](.github/workflows/validate-documentation.yml) and [TEST_PLAN.md](docs/TEST_PLAN.md).
+
 ## Business benefits
 
 The workflow is designed to:
