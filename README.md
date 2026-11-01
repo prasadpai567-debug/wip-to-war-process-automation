@@ -1,299 +1,219 @@
-# WIP-to-WAR Process Automation
+# SAP WIP Production-Order Status Automation
 
-Excel VBA and SAP GUI Scripting automation for extracting WIP production-order data, identifying eligible orders, and updating their SAP status through `COR2`.
+Excel VBA and SAP GUI Scripting automation for filtering WIP production orders and updating an SAP COR2 user status.
 
-> Important: The workbook is named **WIP-to-WAR**, but the VBA code searches for and selects the SAP status value `VAR`. Confirm the business meaning and the `VAR`/`WAR` mapping before publishing or using this project.
+> Portfolio note: This repository contains sanitized VBA source and documentation. The original macro-enabled workbook and production data are not included. The current implementation selects SAP status `VAR`; confirm its relationship to the project name “WIP-to-WAR” before operational use.
 
-## Project overview
+## Business problem
 
-This application automates a repetitive production-order workflow that would otherwise require a user to:
+The process requires repeated movement between SAP and Excel:
 
-1. Run SAP transaction `ZCO05` for plant `1900` and user status `WIP`.
-2. Export the result to Excel.
-3. Filter the export using predefined scheduler, order-type, delivery, user-decision, and confirmation criteria.
-4. Copy qualifying order numbers into a work queue.
+1. Run SAP transaction `ZCO05`.
+2. Export WIP production-order data.
+3. Filter the export using operational selection rules.
+4. Create a queue of eligible order numbers.
 5. Open each order in SAP transaction `COR2`.
-6. Find and select the `VAR` status.
-7. Save the change and record the result.
+6. Select the required user status.
+7. Record the result for follow-up.
 
-The workbook uses Excel as the staging and result-tracking layer. SAP GUI Scripting performs the SAP navigation and updates.
+Manual processing is repetitive and increases the risk of inconsistent filtering, duplicate order handling, and missed exceptions.
 
-## Implemented features
+## What the automation does
 
-- **One-click execution:** The visible `ZCO05` worksheet shape is assigned to the public VBA procedure `RunAll`.
-- **SAP export automation:** Connects to an open SAP GUI session and runs transaction `ZCO05` with plant `1900` and user status `WIP`.
-- **Export-file detection:** Looks in `C:\TEMP` for the newest file matching `EXPORT_*.xlsx`, waiting up to 30 seconds for the file to appear.
-- **Workbook refresh:** Clears or creates the `Format` and `Temp` worksheets before each run.
-- **Read-only source import:** Opens the newest SAP export as a read-only workbook and copies the first worksheet into `Format`.
-- **Two filter profiles:** Applies two predefined Excel AutoFilter sequences to identify qualifying orders.
-- **Order queue creation:** Copies visible order numbers from column C into `Temp` and removes duplicate order numbers.
-- **SAP status update:** Opens each queued order in `COR2`, opens the status list, searches the first ten visible status rows for `VAR`, and selects it when found.
-- **Result tracking:** Writes `Success`, `Error - Info Popup`, or `Error - VAR not found` to the `Results` column.
-- **Completion summary:** Displays staged, successful, and exception counts in a message box.
-- **Temporary-file cleanup:** Deletes the newest `EXPORT_*.xlsx` file from `C:\TEMP` after the processing loop.
+The VBA workflow:
+
+1. Connects to an existing SAP GUI session.
+2. Runs `ZCO05` for plant `1900` and user status `WIP`.
+3. Exports the report to a local `EXPORT_*.xlsx` file in `C:\TEMP`.
+4. Imports the first worksheet into Excel worksheet `Format`.
+5. Applies two predefined filter profiles.
+6. Creates a deduplicated order queue in worksheet `Temp`.
+7. Opens each queued order in `COR2`.
+8. Searches the first ten visible status rows for `VAR`.
+9. Selects the status and attempts to save the order.
+10. Records a per-order result in `Temp!B:B`.
+
+The business meaning of `VAR` and its relationship to “WAR” must be confirmed before the automation is used to update SAP records.
+
+## Verified capabilities
+
+- Excel VBA automation with `Option Explicit`
+- SAP GUI Scripting through late-bound objects
+- SAP `ZCO05` export navigation
+- Excel worksheet refresh and staging
+- AutoFilter processing with two selection profiles
+- Duplicate order-number removal
+- SAP `COR2` order navigation
+- Status lookup and selection for `VAR`
+- Per-order result tracking
+- Completion summary message
+- Temporary export-file handling
 
 ## Application workflow
 
 ### Stage 1: Export WIP data from SAP
 
-`Stage1_RunZCO05`:
+Procedure: `Stage1_RunZCO05`
 
-1. Attaches to the first available SAP GUI connection and session through `GetObject("SAPGUI")`.
-2. Opens transaction `/NZCO05`.
-3. Sets plant to `1900`.
-4. Sets the SAP user-status filter to `WIP`.
-5. Executes the report.
-6. Uses the SAP menu export flow to save an Excel file in `C:\TEMP`.
-7. Waits for the newest `EXPORT_*.xlsx` file to become available.
+- Attaches to the first available SAP connection and session.
+- Opens `/NZCO05`.
+- Sets plant `1900`.
+- Sets the SAP user-status filter to `WIP`.
+- Executes the report.
+- Uses the SAP menu export flow.
+- Saves to `C:\TEMP`.
+- Waits up to 30 seconds for a matching `EXPORT_*.xlsx` file.
 
-### Stage 2: Clean and stage orders in Excel
+### Stage 2: Filter and stage eligible orders
 
-`Stage2_CleanExcel`:
+Procedure: `Stage2_CleanExcel`
 
-1. Locates the newest SAP export.
-2. Clears or creates `Format` and `Temp`.
-3. Copies the first sheet of the SAP export into `Format`.
-4. Creates `Temp!A1:B1` with `Ord. No.` and `Results` headers.
-5. Runs filter profile 1:
-   - Scheduler values: `032`, `033`, `040`, `061`, `065`
-   - Order types: `ZP01`, `ZP03`, `ZP04`, `ZP06`, `ZP07`, `ZP14`
-   - Delivery (`DLV`) is not blank
-   - User decision (`Usr Decsn.`) is not blank
-   - Confirmation (`CNF`) is not blank
-6. Copies visible order numbers from column C to `Temp`.
-7. Runs filter profile 2:
-   - Scheduler values: `060`, `066`, `070`, `080`, `085`, `100`
-   - Delivery (`DLV`) is not blank
-   - Confirmation (`CNF`) is not blank
-8. Appends the second set of order numbers to `Temp`.
-9. Removes duplicate order numbers and autofits the two output columns.
+The source workbook is opened read-only and copied into `Format`. The queue is rebuilt in `Temp`.
+
+Filter profile 1:
+
+- Scheduler: `032`, `033`, `040`, `061`, `065`
+- Order type: `ZP01`, `ZP03`, `ZP04`, `ZP06`, `ZP07`, `ZP14`
+- Delivery is not blank
+- User decision is not blank
+- Confirmation is not blank
+
+Filter profile 2:
+
+- Scheduler: `060`, `066`, `070`, `080`, `085`, `100`
+- Delivery is not blank
+- Confirmation is not blank
+
+The resulting order numbers are appended to `Temp` and deduplicated.
 
 ### Stage 3: Update SAP status
 
-`Stage3_COR2_VARUpdate`:
+Procedure: `Stage3_COR2_VARUpdate`
 
-1. Reads each order number from `Temp`.
-2. Opens `/nCOR2` in SAP.
-3. Selects the completion-status option and enters the order number.
-4. Handles an information popup by recording `Error - Info Popup`.
-5. Opens the order-status list.
-6. Checks status rows 0 through 9 for the exact text `VAR`.
-7. Selects `VAR` and saves the order when found.
-8. Records `Success` when the status is found, or `Error - VAR not found` otherwise.
-9. Shows a completion summary.
-10. Deletes the newest matching export file from `C:\TEMP`.
+For each staged order, the procedure:
 
-## Workbook structure
+- Opens `/nCOR2`.
+- Selects the completion-status option.
+- Enters the order number.
+- Handles one recognized information-popup case.
+- Opens the order-status list.
+- Searches status rows 0 through 9 for the exact text `VAR`.
+- Selects `VAR` when found.
+- Writes `Success`, `Error - Info Popup`, or `Error - VAR not found`.
+- Attempts to save when `VAR` is found.
+- Displays staged, successful, and exception counts.
 
-```text
-WIP-TO-WAR Process Automation.xlsm
-├── Format
-│   ├── Imported SAP production-order data
-│   ├── 20 columns, A:T
-│   └── Worksheet shape labeled ZCO05, assigned to RunAll
-├── Temp
-│   ├── Ord. No.
-│   └── Results
-└── VBA project
-    ├── ThisWorkbook       Workbook document module; no custom procedure logic observed
-    ├── Sheet1             Worksheet module; no custom procedure logic observed
-    └── Module1            Main automation code and helper procedures
-```
-
-### `Format` columns
-
-The imported data contains the following fields:
-
-`Plant`, `Prod. schdlr`, `Ord. No.`, `Material no.`, `Ord. typ`, `GIE`, `DLV`, `Usr Decsn.`, `TECO`, `Usr stat.`, `Err stat`, `Fiscal yr.`, `Fiscal prd.`, `DLVE`, `DLVR`, `Del. flg`, `Del. indic.`, `CNF`, `PCNF`, and `Actual rel. date`.
-
-### `Temp` columns
-
-| Column | Purpose |
-| --- | --- |
-| `Ord. No.` | Deduplicated list of SAP order numbers selected by the filter profiles |
-| `Results` | Per-order outcome written by the `COR2` processing stage |
-
-## Technical details
-
-### Languages and platforms
-
-- Visual Basic for Applications (VBA)
-- Microsoft Excel desktop, macro-enabled workbook format (`.xlsm`)
-- Windows-only execution because the code declares the Windows `kernel32` `Sleep` API
-- SAP GUI for Windows with SAP GUI Scripting enabled
-
-### VBA procedures
-
-| Procedure | Role |
-| --- | --- |
-| `RunAll` | Master entry point; runs all three stages |
-| `Stage1_RunZCO05` | Runs SAP export and waits for the generated file |
-| `Stage2_CleanExcel` | Imports, filters, stages, and deduplicates order numbers |
-| `Stage3_COR2_VARUpdate` | Processes the staged queue in SAP and records results |
-| `CopyVisibleColC` | Copies visible nonblank order numbers from `Format` to `Temp` |
-| `GetLatestSAPExport` | Returns the newest `EXPORT_*.xlsx` file in a folder |
-| `KillMessageFilter` | Clears an object variable used for message-filter tracking |
-
-### Excel features used
-
-- `Workbooks.Open` with `ReadOnly:=True`
-- Worksheet creation, clearing, copying, and renaming
-- `AutoFilter` with multi-value and nonblank criteria
-- `SpecialCells(xlCellTypeVisible)`
-- `RemoveDuplicates`
-- Column autofit
-- Worksheet shape-to-macro assignment
-- `MsgBox` status and completion messages
-- `Application.ScreenUpdating` and `Application.DisplayAlerts`
-
-### External dependencies
-
-- SAP GUI must already be open and logged in.
-- SAP GUI Scripting must be enabled and permitted by the SAP environment.
-- The user must have access to transactions `ZCO05` and `COR2`.
-- `C:\TEMP` must exist and be writable.
-- The SAP export must use the `EXPORT_*.xlsx` naming pattern.
-
-No database, Outlook integration, web service, Power Query connection, user form, chart, pivot table, or formula-driven calculation was observed in the supplied workbook.
-
-## Installation and setup
-
-1. Download the repository as a ZIP or clone it with Git.
-2. Install Microsoft Excel desktop on Windows.
-3. Install SAP GUI for Windows and confirm that SAP GUI Scripting is enabled according to your organization's policy.
-4. Confirm that your SAP user can run `ZCO05`, export the result, open `COR2`, change the required status, and save the order.
-5. Create `C:\TEMP` if it does not already exist.
-6. Place the sanitized `.xlsm` workbook in a local folder.
-7. Open SAP GUI and log in before starting the workbook.
-8. Open the workbook and allow macros only if the file is trusted and approved for use.
-9. Click the `ZCO05` shape on the `Format` worksheet.
-10. Review the `Temp` worksheet and its `Results` column after completion.
-
-The current code contains hard-coded SAP field identifiers, filter values, plant/user values, and the `C:\TEMP` folder. These values must match the target SAP environment.
-
-## Usage example
-
-```text
-1. Start SAP GUI and log in.
-2. Open the Excel macro workbook.
-3. Click the ZCO05 button on Format.
-4. Wait for the staged queue to be processed.
-5. Review Temp!A:B for order numbers and results.
-6. Review the completion message for staged, successful, and exception counts.
-```
-
-The macro deletes the newest matching export file from `C:\TEMP` at the end of the pipeline. Preserve a backup or change that policy in an approved development copy if the raw export is needed for audit purposes.
-
-## Business benefits
-
-The implemented workflow is designed to:
-
-- Reduce repeated manual navigation between SAP and Excel.
-- Apply consistent selection rules to the WIP production-order population.
-- Reduce copying and transcription errors when creating the SAP work queue.
-- Remove duplicate order numbers before SAP updates.
-- Provide a visible per-order result and a completion summary.
-- Reduce the time spent on repetitive order-status maintenance.
-- Make exception cases visible for follow-up instead of silently ignoring them.
-
-No measured time saving, error-rate reduction, or throughput baseline was included in the workbook. Any quantified business claim should be supported by operational measurements.
-
-## Recommended repository structure
+## Repository structure
 
 ```text
 .
 ├── README.md
-├── workbook/
-│   ├── WIP-TO-WAR-Process-Automation-sanitized.xlsm
-│   └── sample-input/
-│       └── EXPORT_sample.xlsx
-├── src/
-│   ├── Module1.bas
-│   ├── ThisWorkbook.cls
-│   └── Sheet1.cls
-├── docs/
-│   ├── workflow.md
-│   ├── data-dictionary.md
-│   └── screenshots/
 ├── .gitignore
-└── LICENSE
+├── docs/
+│   ├── PORTFOLIO_SUMMARY.md
+│   ├── REPOSITORY_AUDIT.md
+│   ├── TEST_PLAN.md
+│   └── VBA_APPLICATION_REVIEW.md
+└── src/
+    ├── Module1.bas
+    ├── Sheet1.cls
+    └── ThisWorkbook.cls
 ```
 
-### Files suitable for GitHub
+The repository currently stores exported VBA source and documentation. It does not include the original `.xlsm` workbook, SAP exports, or production data.
 
-- `README.md`
-- Sanitized exported VBA modules such as `src/Module1.bas`
-- A sanitized workbook only if the macro project and sample data are approved for public release
-- Dummy input data that preserves the column structure without using real order, material, supplier, or company data
-- Redacted screenshots and workflow documentation
+## Requirements
 
-### Files to keep private or exclude
+- Windows
+- Microsoft Excel desktop
+- SAP GUI for Windows
+- SAP GUI Scripting enabled and permitted
+- Access to SAP transactions `ZCO05` and `COR2`
+- An approved macro-enabled workbook containing the required worksheets and button
+- A writable export directory
 
-- The original workbook supplied for this review
-- Real SAP exports and production-order data
-- Real material numbers, supplier details, plant data, or internal status data
-- Screenshots containing SAP user names, system names, host names, order numbers, or company records
-- Internal SharePoint paths, author information, Templafy identifiers, or other document metadata
-- Any workbook containing an internal macro project unless its publication is approved
+The source files alone are not a complete runnable application. The workbook must be packaged separately only after it has been sanitized and approved for release.
 
-Suggested `.gitignore` entries:
+## Setup and usage
 
-```gitignore
-*.xlsx
-*.xlsm
-!workbook/WIP-TO-WAR-Process-Automation-sanitized.xlsm
-!workbook/sample-input/EXPORT_sample.xlsx
-workbook/private/
-workbook/live-data/
-*.export.xlsx
-```
+1. Clone or download this repository.
+2. Obtain an approved sanitized workbook package separately.
+3. Install Microsoft Excel desktop and SAP GUI for Windows.
+4. Confirm that SAP GUI Scripting is enabled according to organizational policy.
+5. Confirm access to `ZCO05` and `COR2`.
+6. Confirm that `C:\TEMP` exists and is writable.
+7. Open SAP GUI and log in to the approved test system.
+8. Open the approved workbook and enable macros only when the file is trusted.
+9. Start the workbook entry point assigned to the `ZCO05` control.
+10. Review the `Temp` worksheet and completion message.
 
-Adjust the allow-list to match the sanitized file name used by the repository.
+The current source contains hard-coded SAP control IDs, filter values, plant and status values, and the `C:\TEMP` path. These values must match the intended SAP environment.
 
-## Screenshots to include
+## Safety and data handling
 
-Use synthetic or fully redacted data in every public screenshot.
+This automation changes SAP records. It should be tested in an approved non-production environment until the following are confirmed:
 
-1. **Workbook landing view:** `Format` with the `ZCO05` button visible and dummy production-order rows.
-2. **Filter/staging view:** `Temp` showing deduplicated order numbers before SAP processing.
-3. **Results view:** `Temp` showing `Success`, `Error - Info Popup`, and `Error - VAR not found` examples.
-4. **SAP export step:** A redacted `ZCO05` selection screen, only if screenshots are approved for public use.
-5. **SAP update step:** A redacted `COR2` status list with `VAR` selected, only if approved.
-6. **Completion message:** A sample summary message with dummy counts.
+- Correct SAP system, client, and session
+- Correct plant and filter values
+- Correct target status
+- Correct export file
+- Successful save confirmation
+- Approved handling of exported data
 
-## Security and publication notes
+Do not commit real order numbers, material numbers, supplier information, company records, SAP exports, screenshots, credentials, or internal paths.
 
-Static review found no plain-text SAP password, API key, or other login secret in the readable VBA source. The VBA project contains standard project-protection metadata; that is not a substitute for secret management or access control.
+The current implementation deletes the newest matching export file from `C:\TEMP` after processing. Preserve the export or change that policy in an approved development copy if the source data is needed for audit or reconciliation.
 
-Before publishing:
+## Error handling and logging
 
-- Remove real order numbers, material numbers, dates, statuses, and plant records.
-- Remove or replace document properties and custom metadata.
-- Remove internal SharePoint or OneDrive paths.
-- Remove author names and tenant/template identifiers unless intentionally public.
-- Replace the workbook with dummy data and verify that the macro does not point to a real SAP environment.
-- Review every hard-coded SAP transaction, field identifier, status value, and local path with the process owner.
+The implementation displays message boxes and writes limited per-order results to `Temp`. It does not currently provide a durable timestamped audit log.
+
+Known technical limitations include:
+
+- Excel application settings are not protected by a single cleanup block.
+- Some failure paths use VBA `End`.
+- SAP connection and session selection is positional.
+- Export freshness is inferred from the newest filename match.
+- Only the first ten visible SAP status rows are searched.
+- A successful status selection is recorded before save confirmation is verified.
+- Results are not explicitly saved to the workbook by the macro.
+- The source does not include an automated test suite.
+
+See [REPOSITORY_AUDIT.md](docs/REPOSITORY_AUDIT.md) for the detailed findings and [TEST_PLAN.md](docs/TEST_PLAN.md) for the recommended validation approach.
+
+## Business benefits
+
+The workflow is designed to:
+
+- Reduce repeated navigation between SAP and Excel.
+- Apply consistent selection rules.
+- Reduce manual copying and duplicate order handling.
+- Make per-order exceptions visible.
+- Standardize a repetitive production-order status process.
+
+No measured time saving, error-rate reduction, or throughput result is claimed because the repository contains no operational baseline.
 
 ## Future improvements
 
-These items are suggestions, not features present in the supplied workbook:
+- Confirm and document the `VAR`/“WAR” business mapping.
+- Add a configuration sheet for paths, plant, filters, and target status.
+- Add preflight checks for SAP, folder, file, and worksheet readiness.
+- Replace `End` with structured error handling and cleanup.
+- Validate export freshness against a run-start timestamp.
+- Preserve or archive source exports.
+- Add a dry-run and confirmation mode.
+- Confirm SAP save success before writing `Success`.
+- Search the complete SAP status list.
+- Add a durable audit log.
+- Add synthetic test data and a non-production SAP test procedure.
+- Package an approved sanitized workbook as a release artifact.
 
-- Move plant, SAP user, filter lists, status values, and export path into a configuration area.
-- Validate SAP connection, session, transaction access, and `C:\TEMP` before starting.
-- Replace `End`-based error exits with structured cleanup that restores Excel application settings.
-- Add a dry-run or confirmation step before writing status changes to SAP.
-- Preserve or archive exports instead of deleting them automatically.
-- Use a run-specific export filename or a stricter freshness check to avoid processing a stale file.
-- Search the complete SAP status list rather than only rows 0 through 9.
-- Add an audit log with timestamp, order number, selected status, result, and error text.
-- Add a dummy-data test harness and a documented SAP test-system procedure.
-- Export VBA modules into source-controlled text files and keep the `.xlsm` as a packaged release artifact.
-- Confirm and document whether SAP status `VAR` is the intended implementation of the business term `WAR`.
+## Portfolio summary
 
-## Portfolio description
+Developed an Excel VBA and SAP GUI Scripting automation for a WIP production-order process. The solution extracts data from SAP `ZCO05`, applies business filters in Excel, removes duplicate orders, stages a processing queue, and navigates SAP `COR2` to update the required order status.
 
-Developed an Excel VBA and SAP GUI Scripting automation that extracts WIP production-order data from SAP transaction `ZCO05`, filters and deduplicates eligible orders, and updates their status through `COR2`. The solution automates the staging, validation, result tracking, and cleanup steps of a procurement and production-operations workflow.
+The project demonstrates Excel VBA, SAP GUI Scripting, process automation, data filtering, exception tracking, operational risk awareness, and technical documentation.
 
 ## License and ownership
 
-Add a license only after confirming that the VBA code, SAP transaction logic, workbook design, sample data, and company-specific process knowledge may be shared publicly. The original workbook contains business-specific logic and operational data that may require employer approval before publication.
+No license is currently included. Add one only after confirming that the VBA code, SAP transaction logic, workbook design, and company-specific process knowledge may be shared publicly.
